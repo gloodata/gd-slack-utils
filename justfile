@@ -22,5 +22,8 @@ archive-linkstats:
 import-archive-meilisearch:
     uv run src/archiveimporter.py meilisearch-from-env --archive-format {{ARCHIVE_FORMAT}}
 
+meilisearch-delete-index-from-env:
+    uv run src/archiveimporter.py meilisearch-delete-index-from-env
+
 gen-emoji-shortcodes:
     uv run tools/genemojicodes.py

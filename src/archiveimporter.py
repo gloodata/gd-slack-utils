@@ -51,27 +51,34 @@ class MeiliIndexConfig:
         print(f"Index: {self.index}")
         print(f"Primary Key: {self.primary_key}")
 
-    def to_index(self, create=True):
+    def to_index(self):
         client = meilisearch.Client(self.url, self.key)
+        ensure_index_exists(client, self.index, self.primary_key)
+        index = client.index(self.index)
 
-        if create:
-            index = ensure_index_exists(client, self.index, self.primary_key)
-        else:
-            index = client.index(self.index)
+        return client, index
+
+    def to_existing_index(self):
+        client = meilisearch.Client(self.url, self.key)
+        index = get_existing_index_opt(client, self.index)
 
         return client, index
 
 
-def ensure_index_exists(client, index_uid, primary_key="id"):
+def get_existing_index_opt(client, index_uid):
     try:
-        client.get_index(index_uid)
+        return client.get_index(index_uid)
     except meilisearch.errors.MeilisearchApiError as err:
         if err.code == "index_not_found":
-            client.create_index(index_uid, {"primaryKey": primary_key})
+            return None
         else:
             raise err
 
-    return client.index(index_uid)
+
+def ensure_index_exists(client, index_uid, primary_key="id"):
+    index = get_existing_index_opt(client, index_uid)
+    if index is None:
+        client.create_index(index_uid, {"primaryKey": primary_key})
 
 
 def add_common_args(parser):
@@ -115,6 +122,12 @@ def build_parser():
     )
     add_common_args(env_parser)
 
+    # Meilisearch delete index from env subcommand
+    subparsers.add_parser(
+        "meilisearch-delete-index-from-env",
+        help="Delete Meilisearch index using environment variables",
+    )
+
     return parser
 
 
@@ -129,6 +142,17 @@ def main():
         config = MeiliIndexConfig.from_cli_args(args)
     elif args.command == "meilisearch-from-env":
         config = MeiliIndexConfig.from_env()
+    elif args.command == "meilisearch-delete-index-from-env":
+        print("Running meilisearch-delete-index-from-env")
+        config = MeiliIndexConfig.from_env()
+        client, index = config.to_existing_index()
+        if index:
+            print("Deleting index", config.index)
+            index.delete()
+        else:
+            print("Index doesn't exist", config.index)
+
+        return
     else:
         print("No command specified. Use --help for usage information.")
         return
@@ -140,7 +164,7 @@ def main():
     action.channel_extractor = channel_extractor
 
     config.show()
-    ctx = walk_archive(args.archive_base_path, glob_pattern, action)
+    walk_archive(args.archive_base_path, glob_pattern, action)
 
 
 class SlackThreadImporter(RethreadAction):
