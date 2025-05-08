@@ -195,9 +195,17 @@ class SlackThreadImporter(RethreadAction):
 
 def thread_to_ms_doc(thread, ctx):
     m = thread.message
+    u = m.user
     c = thread.channel
+    date = m.dt.isoformat()
     return dict(
-        id=m.ts, content=m.to_mdom(ctx).to_md(), channel_id=c.id, channel_name=c.name
+        id=m.ts.replace(".", "_"),
+        date=date,
+        content=m.to_mdom(ctx).to_md(),
+        user_id = u.id,
+        user_name = u.name,
+        channel_id=c.id,
+        channel_name=c.name,
     )
 
 
