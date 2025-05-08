@@ -7,6 +7,7 @@ from enum import Enum
 from datetime import datetime
 from typing import List
 from pathlib import Path
+from dataclasses import dataclass
 
 from urltitle import URLTitleReader, URLTitleError
 
@@ -68,6 +69,10 @@ class Context:
         text = d.get("text")
         team = d.get("team")
         raw_blocks = d.get("blocks")
+        reactions = [
+            Reaction(v.get("name", "?"), v.get("count", 1))
+            for v in d.get("reactions", [])
+        ]
 
         if raw_blocks is None:
             raw_blocks = [
@@ -105,7 +110,7 @@ class Context:
         assert ts is not None
         assert text is not None
 
-        return Message(t, user, ts, thread_ts, text, team, blocks)
+        return Message(t, user, ts, thread_ts, text, team, blocks, reactions)
 
     @classmethod
     def from_base_path(cls, base_path):
@@ -234,6 +239,12 @@ class MessageType(Enum):
                 return cls.UNKNOWN
 
 
+@dataclass
+class Reaction:
+    name: str
+    count: int = 1
+
+
 class Message:
     def __init__(
         self,
@@ -244,6 +255,7 @@ class Message:
         text: str,
         team: str | None,
         blocks: list,
+        reactions: List[Reaction],
     ):
         self.type = type_
         self.user = user
@@ -253,6 +265,7 @@ class Message:
         self.text = text
         self.team = team
         self.blocks = blocks
+        self.reactions = reactions
 
     def get_emojis(self):
         items = []
@@ -958,6 +971,15 @@ class ToSQLite(RethreadAction):
         )
         """)
 
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reaction (
+            ts TEXT PRIMARY KEY,
+            name TEXT,
+            count INTEGER DEFAULT 1,
+            FOREIGN KEY (ts) REFERENCES thread (ts)
+        )
+        """)
+
         if self.store_md:
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS thread_md (
@@ -991,6 +1013,12 @@ class ToSQLite(RethreadAction):
     def insert_channels(self, channels):
         self.insert_many(
             "INSERT OR REPLACE INTO channel (id, name) VALUES (:id, :name)", channels
+        )
+
+    def insert_reactions(self, reactions):
+        self.insert_many(
+            "INSERT OR REPLACE INTO reaction (ts, name, count) VALUES (:ts, :name, :count)",
+            reactions,
         )
 
     def insert_threads(self, threads):
@@ -1036,6 +1064,12 @@ class ToSQLite(RethreadAction):
                 print(batch[0].message.dt)
                 self.insert_threads(rows)
 
+                reactions = [
+                    dict(ts=t.message.ts, name=r.name, count=r.count)
+                    for t in batch
+                    for r in t.message.reactions
+                ]
+                self.insert_reactions(reactions)
                 if self.store_md:
                     rows = [
                         dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_md())
