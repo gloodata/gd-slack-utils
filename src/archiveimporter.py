@@ -1,7 +1,13 @@
 import os
 import argparse
 
-from archivereader import RethreadAction, archive_channel_extractor, foc_history_channel_extractor, walk_archive, ARCHIVE_TYPES
+from archivereader import (
+    RethreadAction,
+    archive_channel_extractor,
+    foc_history_channel_extractor,
+    walk_archive,
+    ARCHIVE_TYPES,
+)
 import meilisearch
 
 MS_URL_KEY = "MS_URL"
@@ -55,6 +61,7 @@ class MeiliIndexConfig:
 
         return client, index
 
+
 def ensure_index_exists(client, index_uid, primary_key="id"):
     try:
         client.get_index(index_uid)
@@ -66,41 +73,61 @@ def ensure_index_exists(client, index_uid, primary_key="id"):
 
     return client.index(index_uid)
 
+
 def add_common_args(parser):
-    parser.add_argument('--archive-format', default='archive', choices=['archive', 'foc-history'],
-                       help='Format of the Slack export (archive or foc-history)')
-    parser.add_argument('--archive-base-path', default='slack_archive',
-                       help='Base path for the Slack export files')
+    parser.add_argument(
+        "--archive-format",
+        default="archive",
+        choices=["archive", "foc-history"],
+        help="Format of the Slack export (archive or foc-history)",
+    )
+    parser.add_argument(
+        "--archive-base-path",
+        default="slack_archive",
+        help="Base path for the Slack export files",
+    )
+
 
 def build_parser():
-    parser = argparse.ArgumentParser(description='Meilisearch configuration utility')
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    parser = argparse.ArgumentParser(description="Meilisearch configuration utility")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Meilisearch subcommand
-    meili_parser = subparsers.add_parser('meilisearch', help='Configure Meilisearch connection')
-    meili_parser.add_argument('--url', default=MS_URL_DEFAULT,
-                             help=f'Meilisearch URL (env: {MS_URL_KEY})')
-    meili_parser.add_argument('--index', default=MS_INDEX_DEFAULT,
-                             help=f'Index name (env: {MS_INDEX_KEY})')
-    meili_parser.add_argument('--primary-key', default=MS_PRIMARY_KEY_DEFAULT,
-                             help=f'Primary key field (env: {MS_PRIMARY_KEY_KEY})')
+    meili_parser = subparsers.add_parser(
+        "meilisearch", help="Configure Meilisearch connection"
+    )
+    meili_parser.add_argument(
+        "--url", default=MS_URL_DEFAULT, help=f"Meilisearch URL (env: {MS_URL_KEY})"
+    )
+    meili_parser.add_argument(
+        "--index", default=MS_INDEX_DEFAULT, help=f"Index name (env: {MS_INDEX_KEY})"
+    )
+    meili_parser.add_argument(
+        "--primary-key",
+        default=MS_PRIMARY_KEY_DEFAULT,
+        help=f"Primary key field (env: {MS_PRIMARY_KEY_KEY})",
+    )
     add_common_args(meili_parser)
 
     # Meilisearch from env subcommand
-    env_parser = subparsers.add_parser('meilisearch-from-env', help='Configure Meilisearch using environment variables')
+    env_parser = subparsers.add_parser(
+        "meilisearch-from-env", help="Configure Meilisearch using environment variables"
+    )
     add_common_args(env_parser)
 
     return parser
+
 
 def parse_args():
     parser = build_parser()
     return parser.parse_args()
 
+
 def main():
     args = parse_args()
-    if args.command == 'meilisearch':
+    if args.command == "meilisearch":
         config = MeiliIndexConfig.from_cli_args(args)
-    elif args.command == 'meilisearch-from-env':
+    elif args.command == "meilisearch-from-env":
         config = MeiliIndexConfig.from_env()
     else:
         print("No command specified. Use --help for usage information.")
@@ -135,16 +162,20 @@ class SlackThreadImporter(RethreadAction):
         print("Indexing documents")
         threads = self.get_sorted_messages_by_ts()
         for i in range(0, len(threads), self.batch_size):
-            batch = threads[i:i + self.batch_size]
+            batch = threads[i : i + self.batch_size]
             docs = [thread_to_ms_doc(thread, self.ctx) for thread in batch]
             if docs:
                 print(batch[0].message.dt)
                 self.index.add_documents(docs)
 
+
 def thread_to_ms_doc(thread, ctx):
     m = thread.message
     c = thread.channel
-    return dict(id=m.ts, content=m.to_mdom(ctx).to_md(), channel_id=c.id, channel_name=c.name)
+    return dict(
+        id=m.ts, content=m.to_mdom(ctx).to_md(), channel_id=c.id, channel_name=c.name
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -70,10 +70,12 @@ class Block(Node):
         childs = [child.to_html() for child in self.childs]
         return node("div", childs, {"class": self.type})
 
+
 class Paragraph(Block):
     def to_html(self):
         childs = [child.to_html() for child in self.childs]
         return node("p", childs, {"class": self.type})
+
 
 class Preformatted(Block):
     def __init__(self, childs):
