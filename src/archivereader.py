@@ -842,6 +842,12 @@ class ToMarkdownAction(BaseAction):
         print()
 
 
+class ToTextAction(BaseAction):
+    def on_message(self, msg):
+        print(msg.to_mdom(self.ctx).to_text())
+        print()
+
+
 class ToEmojiStatsAction(BaseAction):
     def __init__(self):
         super().__init__()
@@ -1099,10 +1105,43 @@ class ToSQLite(RethreadAction):
         )
 
 
+class SortedThreadsAction(RethreadAction):
+    def handle_threads(self, threads):
+        for thread in threads:
+            self.handle_thread(thread)
+
+    def handle_thread(self, thread):
+        pass
+
+    def after_all(self):
+        super().after_all()
+        threads = self.get_sorted_messages_by_ts()
+        self.handle_threads(threads)
+
+
+class ThreadsToMarkdownAction(SortedThreadsAction):
+    def handle_thread(self, thread):
+        print(thread.to_mdom(self.ctx).to_md())
+
+
+class ThreadsToHTMLAction(SortedThreadsAction):
+    def handle_thread(self, thread):
+        print(thread.to_mdom(self.ctx).to_html_str())
+
+
+class ThreadsToTextAction(SortedThreadsAction):
+    def handle_thread(self, thread):
+        print(thread.to_mdom(self.ctx).to_text())
+
+
 ACTIONS = {
     "parse": ParseAction,
     "html": ToHTMLAction,
     "md": ToMarkdownAction,
+    "txt": ToTextAction,
+    "threads-to-html": ThreadsToHTMLAction,
+    "threads-to-md": ThreadsToMarkdownAction,
+    "threads-to-txt": ThreadsToTextAction,
     "emojistats": ToEmojiStatsAction,
     "linkstats": ToLinkStatsAction,
     "rethread": RethreadAction,

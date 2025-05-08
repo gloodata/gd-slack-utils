@@ -41,6 +41,9 @@ class Node:
     def to_md(self):
         return markdownify(self.to_html_str())
 
+    def to_text(self) -> str:
+        return "?"
+
 
 class Ref(Node):
     def __init__(self, type_: str, target: str, text: str):
@@ -58,6 +61,16 @@ class Ref(Node):
             {"class": self.type, "href": f"#{self.type}?key={self.target}"},
         )
 
+    def to_text(self):
+        if self.type == "user" or self.type == "bot":
+            return f"@{self.text}"
+        elif self.type == "nouser":
+            return "@?"
+        elif self.type == "channel":
+            return f"#{self.text}"
+        else:
+            return f"[{self.text}]({self.target})"
+
 
 class Section(Node):
     def __init__(self, type_: str, childs):
@@ -67,6 +80,9 @@ class Section(Node):
     def to_html(self):
         childs = [child.to_html() for child in self.childs]
         return node("section", childs, {"class": self.type})
+
+    def to_text(self):
+        return "\n\n".join(child.to_text() for child in self.childs)
 
 
 class Block(Node):
@@ -78,11 +94,17 @@ class Block(Node):
         childs = [child.to_html() for child in self.childs]
         return node("div", childs, {"class": self.type})
 
+    def to_text(self):
+        return "\n\n".join(child.to_text() for child in self.childs)
+
 
 class Paragraph(Block):
     def to_html(self):
         childs = [child.to_html() for child in self.childs]
         return node("p", childs, {"class": self.type})
+
+    def to_text(self):
+        return "\n\n".join(child.to_text() for child in self.childs)
 
 
 class Preformatted(Block):
@@ -93,6 +115,9 @@ class Preformatted(Block):
         childs = [child.to_html() for child in self.childs]
         return node("pre", childs, {})
 
+    def to_text(self):
+        return "\n".join(child.to_text() for child in self.childs)
+
 
 class Quote(Block):
     def __init__(self, childs):
@@ -101,6 +126,9 @@ class Quote(Block):
     def to_html(self):
         childs = [child.to_html() for child in self.childs]
         return node("blockquote", childs, {})
+
+    def to_text(self):
+        return "\n".join(child.to_text() for child in self.childs)
 
 
 class Group(Block):
@@ -112,6 +140,9 @@ class Group(Block):
 
         return node("div", childs, {"class": self.type})
 
+    def to_text(self):
+        return " ".join(child.to_text() for child in self.childs)
+
 
 class List(Node):
     def __init__(self, childs):
@@ -121,11 +152,17 @@ class List(Node):
         childs = [node("li", child.to_html()) for child in self.childs]
         return node("ul", childs)
 
+    def to_text(self):
+        return "\n* ".join(child.to_text() for child in self.childs)
+
 
 class OrderedList(List):
     def to_html(self):
         childs = [node("li", child.to_html()) for child in self.childs]
         return node("ol", childs)
+
+    def to_text(self):
+        return "\n- ".join(child.to_text() for child in self.childs)
 
 
 class Span(Node):
@@ -140,3 +177,9 @@ class Span(Node):
 
         attrs = {"class": self.type} if self.type else {}
         return node("span", self.text, attrs)
+
+    def to_text(self):
+        if self.type == "isodate":
+            return self.text.replace("T", " ").split(".")[0]
+
+        return self.text
