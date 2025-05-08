@@ -1,4 +1,4 @@
-# GD Slack Utils
+# Gloodata Slack Utils
 
 Tools for working with Slack data exports.
 
@@ -18,4 +18,4 @@ MS_PRIMARY_KEY=id
 - `MS_INDEX_NAME`: Name of the MeiliSearch index. Defaults to "SearchIndex"
 - `MS_PRIMARY_KEY`: Primary key field for documents. Defaults to "id"
 
-These environment variables can also be overridden using command line arguments. Run `python src/archiveimporter.py --help` for more information.
+These environment variables can also be overridden using command line arguments. Run `uv run src/archiveimporter.py --help` for more information.
