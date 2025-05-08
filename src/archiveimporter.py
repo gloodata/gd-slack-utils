@@ -176,13 +176,12 @@ class SlackThreadImporter(RethreadAction):
 
     def before_all(self, base_path, ctx):
         super().before_all(base_path, ctx)
-        ctx.print_messages()
-        print()
         print("Scanning archive")
 
     def after_all(self):
         super().after_all()
-
+        self.ctx.print_messages()
+        print()
         print("Indexing documents")
         threads = self.get_sorted_messages_by_ts()
         for i in range(0, len(threads), self.batch_size):
@@ -202,8 +201,8 @@ def thread_to_ms_doc(thread, ctx):
         id=m.ts.replace(".", "_"),
         date=date,
         content=m.to_mdom(ctx).to_md(),
-        user_id = u.id,
-        user_name = u.name,
+        user_id=u.id,
+        user_name=u.name,
         channel_id=c.id,
         channel_name=c.name,
     )

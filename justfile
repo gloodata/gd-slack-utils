@@ -13,6 +13,10 @@ archive-md:
 archive-rethread:
     uv run src/archivereader.py rethread {{ARCHIVE_FORMAT}} {{ARCHIVE_PATH}}
 
+archive-to-sqlite:
+    rm -f slack.sqlite
+    uv run src/archivereader.py to-sqlite {{ARCHIVE_FORMAT}} {{ARCHIVE_PATH}}
+
 archive-emojistats:
     uv run src/archivereader.py emojistats {{ARCHIVE_FORMAT}} {{ARCHIVE_PATH}}
 

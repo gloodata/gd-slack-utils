@@ -18,11 +18,11 @@ def node(tag, childs, attrib=None):
                 n.append(node("span", line))
         else:
             n.text = childs
-    elif isinstance(childs, Node):
-        n.append(childs)
     elif isinstance(childs, list):
         for child in childs:
             n.append(child)
+    else:
+        n.append(childs)
 
     return n
 
@@ -33,7 +33,7 @@ def node_to_str(n):
 
 class Node:
     def to_html(self):
-        return None
+        return node("span", "")
 
     def to_html_str(self):
         return node_to_str(self.to_html())

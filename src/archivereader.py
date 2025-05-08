@@ -1,11 +1,15 @@
 import re
 import json
+import sqlite3
 import argparse
 
 from enum import Enum
 from datetime import datetime
 from typing import List
 from pathlib import Path
+
+from urltitle import URLTitleReader, URLTitleError
+
 
 import mdom
 
@@ -22,8 +26,25 @@ class Channels:
         return self.by_id.get(user_id)
 
 
+class Users:
+    def __init__(self, by_name, by_id):
+        self.by_name = by_name
+        self.by_id = by_id
+
+    def add_slackbot(self):
+        user = Bot("USLACKBOT", "slackbot", {})
+        self.by_name[user.name] = user
+        self.by_id[user.id] = user
+
+    def from_name(self, name):
+        return self.by_name.get(name)
+
+    def from_id(self, user_id):
+        return self.by_id.get(user_id)
+
+
 class Context:
-    def __init__(self, users, channels, shortcode_to_emoji):
+    def __init__(self, users: Users, channels: Channels, shortcode_to_emoji: dict):
         self.users = users
         self.channels = channels
         self.shortcode_to_emoji = shortcode_to_emoji
@@ -135,23 +156,6 @@ def parse_channels(path):
     return Channels(by_name, by_id)
 
 
-class Users:
-    def __init__(self, by_name, by_id):
-        self.by_name = by_name
-        self.by_id = by_id
-
-    def add_slackbot(self):
-        user = Bot("USLACKBOT", "slackbot", {})
-        self.by_name[user.name] = user
-        self.by_id[user.id] = user
-
-    def from_name(self, name):
-        return self.by_name.get(name)
-
-    def from_id(self, user_id):
-        return self.by_id.get(user_id)
-
-
 class User:
     def __init__(self, id_: str | None, name: str | None, info: dict):
         self.id = id_
@@ -159,12 +163,12 @@ class User:
         self.info = info
 
     def to_mdom(self, ctx: Context):
-        return mdom.Ref("user", self.id, self.name)
+        return mdom.Ref("user", self.id or "", self.name or "")
 
 
 class Bot(User):
     def to_mdom(self, ctx: Context):
-        return mdom.Ref("bot", self.id, self.name)
+        return mdom.Ref("bot", self.id or "", self.name or "")
 
 
 class AnonymousUser(User):
@@ -172,7 +176,7 @@ class AnonymousUser(User):
         super().__init__(None, None, {})
 
     def to_mdom(self, ctx: Context):
-        return mdom.Ref("nouser", self.id, self.name)
+        return mdom.Ref("nouser", "", "")
 
 
 def walk_blocks_for_leaf_instance(blocks, cls, fn):
@@ -395,7 +399,7 @@ class RichTextSectionElement:
                 ctx.warn("unknown-rich-text-section-type", dict(section=d))
                 return RichTextSectionElementUnknown.from_data(d, ctx)
 
-    def to_mdom(self, ctx: Context):
+    def to_mdom(self, ctx: Context) -> mdom.Node:
         return mdom.Span("RichTextSectionElement", "")
 
 
@@ -410,7 +414,7 @@ class RichTextSection(RichTextElement):
         ]
         return cls(elements)
 
-    def to_mdom(self, ctx: Context):
+    def to_mdom(self, ctx: Context) -> mdom.Node:
         childs = [e.to_mdom(ctx) for e in self.elements]
         return mdom.Paragraph("Section", childs)
 
@@ -512,7 +516,7 @@ class RichTextSectionElementLink(RichTextSectionElement):
     def __str__(self):
         return f"<{self.url}|{self.text}>"
 
-    def to_mdom(self, ctx: Context):
+    def to_mdom(self, ctx: Context) -> mdom.Node:
         return mdom.Ref("link", self.url, self.text)
 
 
@@ -595,7 +599,7 @@ class RichTextSectionElementUser(RichTextSectionElement):
         return cls(user, style)
 
     def to_mdom(self, ctx: Context):
-        return mdom.Ref("user", self.user.id, self.user.name)
+        return mdom.Ref("user", self.user.id or "", self.user.name or "")
 
 
 class RichTextSectionElementBroadcast(RichTextSectionElement):
@@ -711,7 +715,9 @@ def parse_users(path):
         items = json.load(handle)
         for info in items:
             id_ = info.get("id")
-            name = info.get("real_name", info.get("name", id_))
+            real_name = info.get("real_name")
+            display_name = info.get("profile", {}).get("display_name")
+            name = display_name or real_name or info.get("name") or id_
             user = User(id_, name, info)
             by_name[name] = user
             by_id[id_] = user
@@ -763,11 +769,14 @@ def foc_history_channel_extractor(path, base_path):
 
 
 class BaseAction:
+    cur_file: Path | None
+    cur_channel: Channel | None
+
     def __init__(self, channel_extractor=archive_channel_extractor):
         self.channel_extractor = channel_extractor
 
-        self.base_path = None
-        self.ctx = None
+        self.base_path = Path(".")
+        self.ctx = Context(Users({}, {}), Channels({}, {}), {})
 
         self.cur_file = None
         self.cur_channel = None
@@ -858,8 +867,6 @@ class ToLinkStatsAction(BaseAction):
                 self.link_by_url[url] = link
 
     def after_all(self):
-        from urltitle import URLTitleReader, URLTitleError
-
         reader = URLTitleReader(verify_ssl=False)
         items = sorted(self.link_count.items(), key=lambda x: x[1], reverse=True)
         for url, count in items:
@@ -914,6 +921,150 @@ class RethreadAction(BaseAction):
         self.process_orphans()
 
 
+class ToSQLite(RethreadAction):
+    def __init__(self, db_path="slack.sqlite", store_md=True, store_html=True):
+        super().__init__()
+        self.batch_size = 200
+        self.conn = sqlite3.connect(db_path)
+        self.store_md = store_md
+        self.store_html = store_html
+        self.initialize_tables()
+
+    def initialize_tables(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user (
+            id TEXT PRIMARY KEY,
+            name TEXT
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS channel (
+            id TEXT PRIMARY KEY,
+            name TEXT
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS thread (
+            ts TEXT PRIMARY KEY,
+            date TEXT,
+            channel_id TEXT,
+            user_id TEXT,
+            reply_count INTEGER,
+            FOREIGN KEY (channel_id) REFERENCES channel (id),
+            FOREIGN KEY (user_id) REFERENCES user (id)
+        )
+        """)
+
+        if self.store_md:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS thread_md (
+                ts TEXT PRIMARY KEY,
+                content TEXT,
+                FOREIGN KEY (ts) REFERENCES thread (ts)
+            )
+            """)
+
+        if self.store_html:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS thread_html (
+                ts TEXT PRIMARY KEY,
+                content TEXT,
+                FOREIGN KEY (ts) REFERENCES thread (ts)
+            )
+            """)
+
+        self.conn.commit()
+
+    def insert_many(self, query, rows):
+        cursor = self.conn.cursor()
+        cursor.executemany(query, rows)
+        self.conn.commit()
+
+    def insert_users(self, users):
+        self.insert_many(
+            "INSERT OR REPLACE INTO user (id, name) VALUES (:id, :name)", users
+        )
+
+    def insert_channels(self, channels):
+        self.insert_many(
+            "INSERT OR REPLACE INTO channel (id, name) VALUES (:id, :name)", channels
+        )
+
+    def insert_threads(self, threads):
+        self.insert_many(
+            "INSERT OR REPLACE INTO thread (ts, date, channel_id, user_id, reply_count) VALUES (:ts, :date, :channel_id, :user_id, :reply_count)",
+            threads,
+        )
+
+    def insert_threads_md(self, threads):
+        self.insert_many(
+            "INSERT OR REPLACE INTO thread_md (ts, content) VALUES (:ts, :content)",
+            threads,
+        )
+
+    def insert_threads_html(self, threads):
+        self.insert_many(
+            "INSERT OR REPLACE INTO thread_html (ts, content) VALUES (:ts, :content)",
+            threads,
+        )
+
+    def after_all(self):
+        super().after_all()
+
+        print("Inserting channels")
+        self.insert_channels(
+            [
+                dict(id=item.id, name=item.name)
+                for item in self.ctx.channels.by_id.values()
+            ]
+        )
+
+        print("Inserting users")
+        self.insert_users(
+            [dict(id=item.id, name=item.name) for item in self.ctx.users.by_id.values()]
+        )
+
+        print("Inserting threads")
+        threads = self.get_sorted_messages_by_ts()
+        for i in range(0, len(threads), self.batch_size):
+            batch = threads[i : i + self.batch_size]
+            rows = [self.thread_to_db_record(thread) for thread in batch]
+            if rows:
+                print(batch[0].message.dt)
+                self.insert_threads(rows)
+
+                if self.store_md:
+                    rows = [
+                        dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_md())
+                        for m in batch
+                    ]
+                    self.insert_threads_md(rows)
+
+                if self.store_html:
+                    rows = [
+                        dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_html_str())
+                        for m in batch
+                    ]
+                    self.insert_threads_html(rows)
+
+    def thread_to_db_record(self, thread):
+        m = thread.message
+        u = m.user
+        c = thread.channel
+        date = m.dt.isoformat()
+
+        return dict(
+            ts=m.ts,
+            date=date,
+            channel_id=c.id,
+            user_id=u.id,
+            reply_count=len(thread.replies),
+        )
+
+
 ACTIONS = {
     "parse": ParseAction,
     "html": ToHTMLAction,
@@ -921,6 +1072,7 @@ ACTIONS = {
     "emojistats": ToEmojiStatsAction,
     "linkstats": ToLinkStatsAction,
     "rethread": RethreadAction,
+    "to-sqlite": ToSQLite,
 }
 
 
