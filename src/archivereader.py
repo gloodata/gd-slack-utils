@@ -930,16 +930,16 @@ def parse_args():
     parser.add_argument(
         "dir_tree_type",
         help="Type of directory tree",
-        choices=["archive", "foc_history"],
+        choices=["archive", "foc-history"],
     )
     parser.add_argument("base_path", help="Root path for glob pattern")
 
     return parser.parse_args()
 
 
-TREE_TYPES = {
+ARCHIVE_TYPES = {
     "archive": (archive_channel_extractor, "*/*.json"),
-    "foc_history": (foc_history_channel_extractor, "*/*/*/*.json"),
+    "foc-history": (foc_history_channel_extractor, "*/*/*/*.json"),
 }
 
 
@@ -947,7 +947,7 @@ def main():
     args = parse_args()
     action = ACTIONS[args.action]()
 
-    channel_extractor, glob_pattern = TREE_TYPES[args.dir_tree_type]
+    channel_extractor, glob_pattern = ARCHIVE_TYPES[args.dir_tree_type]
     action.channel_extractor = channel_extractor
 
     ctx = walk_archive(args.base_path, glob_pattern, action)

@@ -1,6 +1,7 @@
 import os
 import argparse
 
+from archivereader import RethreadAction, archive_channel_extractor, foc_history_channel_extractor, walk_archive, ARCHIVE_TYPES
 import meilisearch
 
 MS_URL_KEY = "MS_URL"
@@ -65,6 +66,12 @@ def ensure_index_exists(client, index_uid, primary_key="id"):
 
     return client.index(index_uid)
 
+def add_common_args(parser):
+    parser.add_argument('--archive-format', default='archive', choices=['archive', 'foc-history'],
+                       help='Format of the Slack export (archive or foc-history)')
+    parser.add_argument('--archive-base-path', default='slack_archive',
+                       help='Base path for the Slack export files')
+
 def build_parser():
     parser = argparse.ArgumentParser(description='Meilisearch configuration utility')
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -77,9 +84,11 @@ def build_parser():
                              help=f'Index name (env: {MS_INDEX_KEY})')
     meili_parser.add_argument('--primary-key', default=MS_PRIMARY_KEY_DEFAULT,
                              help=f'Primary key field (env: {MS_PRIMARY_KEY_KEY})')
+    add_common_args(meili_parser)
 
     # Meilisearch from env subcommand
-    subparsers.add_parser('meilisearch-from-env', help='Configure Meilisearch using environment variables')
+    env_parser = subparsers.add_parser('meilisearch-from-env', help='Configure Meilisearch using environment variables')
+    add_common_args(env_parser)
 
     return parser
 
@@ -91,12 +100,51 @@ def main():
     args = parse_args()
     if args.command == 'meilisearch':
         config = MeiliIndexConfig.from_cli_args(args)
-        config.show()
     elif args.command == 'meilisearch-from-env':
         config = MeiliIndexConfig.from_env()
-        config.show()
     else:
         print("No command specified. Use --help for usage information.")
+        return
+
+    client, index = config.to_index()
+    channel_extractor, glob_pattern = ARCHIVE_TYPES[args.archive_format]
+
+    action = SlackThreadImporter(client, index)
+    action.channel_extractor = channel_extractor
+
+    config.show()
+    ctx = walk_archive(args.archive_base_path, glob_pattern, action)
+
+
+class SlackThreadImporter(RethreadAction):
+    def __init__(self, client, index):
+        super().__init__()
+        self.client = client
+        self.index = index
+        self.batch_size = 100
+
+    def before_all(self, base_path, ctx):
+        super().before_all(base_path, ctx)
+        ctx.print_messages()
+        print()
+        print("Scanning archive")
+
+    def after_all(self):
+        super().after_all()
+
+        print("Indexing documents")
+        threads = self.get_sorted_messages_by_ts()
+        for i in range(0, len(threads), self.batch_size):
+            batch = threads[i:i + self.batch_size]
+            docs = [thread_to_ms_doc(thread, self.ctx) for thread in batch]
+            if docs:
+                print(batch[0].message.dt)
+                self.index.add_documents(docs)
+
+def thread_to_ms_doc(thread, ctx):
+    m = thread.message
+    c = thread.channel
+    return dict(id=m.ts, content=m.to_mdom(ctx).to_md(), channel_id=c.id, channel_name=c.name)
 
 if __name__ == '__main__':
     main()

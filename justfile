@@ -19,5 +19,8 @@ archive-emojistats:
 archive-linkstats:
     uv run src/archivereader.py linkstats {{ARCHIVE_FORMAT}} {{ARCHIVE_PATH}}
 
+import-archive-meilisearch:
+    uv run src/archiveimporter.py meilisearch-from-env --archive-format {{ARCHIVE_FORMAT}}
+
 gen-emoji-shortcodes:
     uv run tools/genemojicodes.py
