@@ -9,7 +9,15 @@ def node(tag, childs, attrib=None):
 
     n = ET.Element(tag, attrib)
     if isinstance(childs, str):
-        n.text = childs
+        lines = childs.split("\n")
+        if len(lines) > 1:
+            for i, line in enumerate(lines):
+                if i > 0:
+                    n.append(node("br", []))
+
+                n.append(node("span", line))
+        else:
+            n.text = childs
     elif isinstance(childs, Node):
         n.append(childs)
     elif isinstance(childs, list):
