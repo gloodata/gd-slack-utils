@@ -275,7 +275,7 @@ class Message:
         )
         return items
 
-    def get_links(self):
+    def get_links(self) -> list["RichTextSectionElementLink"]:
         items = []
         walk_blocks_for_leaf_instance(
             self.blocks, RichTextSectionElementLink, lambda e: items.append(e)
@@ -301,6 +301,11 @@ class Thread:
         self.message = message
         self.replies = replies
         self.channel = channel
+
+    def get_links(self) -> list["RichTextSectionElementLink"]:
+        replies_links = [link for r in self.replies for link in r.get_links()]
+        root_links = self.message.get_links()
+        return root_links + replies_links
 
     def to_mdom(self, ctx: Context):
         childs = [
@@ -948,6 +953,7 @@ class ToSQLite(RethreadAction):
         self.conn = sqlite3.connect(db_path)
         self.store_md = store_md
         self.store_html = store_html
+        self.link_info = LinkCollector()
         self.initialize_tables()
 
     def initialize_tables(self):
@@ -982,6 +988,16 @@ class ToSQLite(RethreadAction):
         CREATE TABLE IF NOT EXISTS reaction (
             ts TEXT PRIMARY KEY,
             name TEXT,
+            count INTEGER DEFAULT 1,
+            FOREIGN KEY (ts) REFERENCES thread (ts)
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS link (
+            ts TEXT,
+            url TEXT,
+            text TEXT,
             count INTEGER DEFAULT 1,
             FOREIGN KEY (ts) REFERENCES thread (ts)
         )
@@ -1028,6 +1044,12 @@ class ToSQLite(RethreadAction):
             reactions,
         )
 
+    def insert_links(self, links):
+        self.insert_many(
+            "INSERT OR REPLACE INTO link (ts, url, text, count) VALUES (:ts, :url, :text, :count)",
+            links,
+        )
+
     def insert_threads(self, threads):
         self.insert_many(
             "INSERT OR REPLACE INTO thread (ts, date, channel_id, user_id, reply_count) VALUES (:ts, :date, :channel_id, :user_id, :reply_count)",
@@ -1064,6 +1086,7 @@ class ToSQLite(RethreadAction):
 
         print("Inserting threads")
         threads = self.get_sorted_messages_by_ts()
+        link_info = LinkCollector()
         for i in range(0, len(threads), self.batch_size):
             batch = threads[i : i + self.batch_size]
             rows = [self.thread_to_db_record(thread) for thread in batch]
@@ -1071,12 +1094,15 @@ class ToSQLite(RethreadAction):
                 print(batch[0].message.dt)
                 self.insert_threads(rows)
 
-                reactions = [
-                    dict(ts=t.message.ts, name=r.name, count=r.count)
-                    for t in batch
-                    for r in t.message.reactions
-                ]
+                reactions = []
+
+                for t in batch:
+                    link_info.handle_thread(t)
+                    for r in t.message.reactions:
+                        reactions.append(dict(ts=t.message.ts, name=r.name, count=r.count))
+
                 self.insert_reactions(reactions)
+
                 if self.store_md:
                     rows = [
                         dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_md())
@@ -1090,6 +1116,12 @@ class ToSQLite(RethreadAction):
                         for m in batch
                     ]
                     self.insert_threads_html(rows)
+
+            self.insert_links([
+                dict(ts=ts, url=info.link.url, text=info.link.text, count=info.count)
+                for info in link_info.link_info.values()
+                for ts in info.refs
+            ])
 
     def thread_to_db_record(self, thread):
         m = thread.message
@@ -1154,6 +1186,46 @@ class ThreadsToTextAction(SortedThreadsAction):
         print("-" * 50)
 
 
+@dataclass
+class LinkInfo:
+    link: RichTextSectionElementLink
+    count: int
+    refs: list[str]
+
+class LinkCollector:
+    def __init__(self):
+        self.link_info = {}
+
+    def handle_thread(self, thread):
+        for link in thread.get_links():
+            url = link.url
+            info = self.link_info.get(url)
+            if info:
+                info.count += 1
+                info.refs.append(thread.message.ts)
+            else:
+                self.link_info[url] = LinkInfo(link, 1, [thread.message.ts])
+
+    def get_links_sorted_by_count(self, reverse=False):
+       return sorted(self.link_info.values(), key=lambda info: info.count, reverse=reverse)
+
+    def get_links_sorted_by_url(self):
+       return sorted(self.link_info.values(), key=lambda info: info.link.url)
+
+class ThreadsToLinksAction(SortedThreadsAction):
+    def __init__(self):
+        super().__init__()
+        self.link_info = LinkCollector()
+
+    def handle_thread(self, thread):
+        self.link_info.handle_thread(thread)
+
+    def after_threads(self, threads):
+        links = self.link_info.get_links_sorted_by_count(reverse=True)
+        for info in links:
+            print(info.link.url, info.count, info.refs)
+
+
 ACTIONS = {
     "parse": ParseAction,
     "html": ToHTMLAction,
@@ -1162,6 +1234,7 @@ ACTIONS = {
     "threads-to-html": ThreadsToHTMLAction,
     "threads-to-md": ThreadsToMarkdownAction,
     "threads-to-txt": ThreadsToTextAction,
+    "threads-to-links": ThreadsToLinksAction,
     "emojistats": ToEmojiStatsAction,
     "linkstats": ToLinkStatsAction,
     "rethread": RethreadAction,
