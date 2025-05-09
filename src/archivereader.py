@@ -947,10 +947,13 @@ class RethreadAction(BaseAction):
 
 
 class ToSQLite(RethreadAction):
-    def __init__(self, db_path="slack.sqlite", store_md=True, store_html=True):
+    def __init__(
+        self, db_path="slack.sqlite", store_txt=True, store_md=True, store_html=True
+    ):
         super().__init__()
         self.batch_size = 200
         self.conn = sqlite3.connect(db_path)
+        self.store_txt = store_txt
         self.store_md = store_md
         self.store_html = store_html
         self.link_info = LinkCollector()
@@ -1002,6 +1005,15 @@ class ToSQLite(RethreadAction):
             FOREIGN KEY (ts) REFERENCES thread (ts)
         )
         """)
+
+        if self.store_txt:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS thread_txt (
+                ts TEXT PRIMARY KEY,
+                content TEXT,
+                FOREIGN KEY (ts) REFERENCES thread (ts)
+            )
+            """)
 
         if self.store_md:
             cursor.execute("""
@@ -1056,6 +1068,12 @@ class ToSQLite(RethreadAction):
             threads,
         )
 
+    def insert_threads_txt(self, threads):
+        self.insert_many(
+            "INSERT OR REPLACE INTO thread_txt (ts, content) VALUES (:ts, :content)",
+            threads,
+        )
+
     def insert_threads_md(self, threads):
         self.insert_many(
             "INSERT OR REPLACE INTO thread_md (ts, content) VALUES (:ts, :content)",
@@ -1095,33 +1113,46 @@ class ToSQLite(RethreadAction):
                 self.insert_threads(rows)
 
                 reactions = []
+                mdoms = []
 
                 for t in batch:
+                    ts = t.message.ts
+                    node = t.message.to_mdom(self.ctx)
                     link_info.handle_thread(t)
+                    mdoms.append((ts, node))
                     for r in t.message.reactions:
-                        reactions.append(dict(ts=t.message.ts, name=r.name, count=r.count))
+                        reactions.append(dict(ts=ts, name=r.name, count=r.count))
 
                 self.insert_reactions(reactions)
 
+                if self.store_txt:
+                    rows = [
+                        dict(ts=ts, content=node.to_text().strip())
+                        for ts, node in mdoms
+                    ]
+                    self.insert_threads_txt(rows)
+
                 if self.store_md:
                     rows = [
-                        dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_md())
-                        for m in batch
+                        dict(ts=ts, content=node.to_md().strip()) for ts, node in mdoms
                     ]
                     self.insert_threads_md(rows)
 
                 if self.store_html:
                     rows = [
-                        dict(ts=m.message.ts, content=m.to_mdom(self.ctx).to_html_str())
-                        for m in batch
+                        dict(ts=ts, content=node.to_html_str()) for ts, node in mdoms
                     ]
                     self.insert_threads_html(rows)
 
-            self.insert_links([
-                dict(ts=ts, url=info.link.url, text=info.link.text, count=info.count)
-                for info in link_info.link_info.values()
-                for ts in info.refs
-            ])
+            self.insert_links(
+                [
+                    dict(
+                        ts=ts, url=info.link.url, text=info.link.text, count=info.count
+                    )
+                    for info in link_info.link_info.values()
+                    for ts in info.refs
+                ]
+            )
 
     def thread_to_db_record(self, thread):
         m = thread.message
@@ -1192,6 +1223,7 @@ class LinkInfo:
     count: int
     refs: list[str]
 
+
 class LinkCollector:
     def __init__(self):
         self.link_info = {}
@@ -1207,10 +1239,13 @@ class LinkCollector:
                 self.link_info[url] = LinkInfo(link, 1, [thread.message.ts])
 
     def get_links_sorted_by_count(self, reverse=False):
-       return sorted(self.link_info.values(), key=lambda info: info.count, reverse=reverse)
+        return sorted(
+            self.link_info.values(), key=lambda info: info.count, reverse=reverse
+        )
 
     def get_links_sorted_by_url(self):
-       return sorted(self.link_info.values(), key=lambda info: info.link.url)
+        return sorted(self.link_info.values(), key=lambda info: info.link.url)
+
 
 class ThreadsToLinksAction(SortedThreadsAction):
     def __init__(self):

@@ -1,13 +1,7 @@
 import os
 import argparse
 
-from archivereader import (
-    RethreadAction,
-    archive_channel_extractor,
-    foc_history_channel_extractor,
-    walk_archive,
-    ARCHIVE_TYPES,
-)
+from archivereader import RethreadAction, walk_archive, ARCHIVE_TYPES
 import meilisearch
 
 MS_URL_KEY = "MS_URL"
