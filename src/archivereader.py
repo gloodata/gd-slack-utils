@@ -1,4 +1,5 @@
 import re
+import sys
 import json
 import sqlite3
 import argparse
@@ -59,7 +60,7 @@ class Context:
 
     def print_messages(self):
         for msg in self.msgs:
-            print(msg["level"], msg["type"], msg["data"])
+            print(msg["level"], msg["type"], msg["data"], file=sys.stderr)
 
     def message_from_data(self, d):
         t = MessageType.from_subtype(d.get("subtype"))
@@ -365,7 +366,7 @@ class Block:
                 return BlockUnknown(d)
 
     def to_mdom(self, ctx: Context):
-        return mdom.Section("block", [])
+        return mdom.Block("block", [])
 
 
 class BlockUnknown(Block):
@@ -672,7 +673,7 @@ class BlockRichText(Block):
 
     def to_mdom(self, ctx: Context):
         childs = [e.to_mdom(ctx) for e in self.elements]
-        return mdom.Section("rich_text", childs)
+        return mdom.Block("rich_text", childs)
 
 
 class BlockSection(Block):
@@ -1106,9 +1107,19 @@ class ToSQLite(RethreadAction):
 
 
 class SortedThreadsAction(RethreadAction):
+    def before_threads(self, threads):
+        pass
+
+    def after_threads(self, threads):
+        pass
+
     def handle_threads(self, threads):
+        self.before_threads(threads)
+
         for thread in threads:
             self.handle_thread(thread)
+
+        self.after_threads(threads)
 
     def handle_thread(self, thread):
         pass
@@ -1122,16 +1133,25 @@ class SortedThreadsAction(RethreadAction):
 class ThreadsToMarkdownAction(SortedThreadsAction):
     def handle_thread(self, thread):
         print(thread.to_mdom(self.ctx).to_md())
+        print("-" * 50)
 
 
 class ThreadsToHTMLAction(SortedThreadsAction):
+    def before_threads(self, threads):
+        print("<!doctype html>")
+        print('<html><head><meta charset="utf-8"></head><body>')
+
+    def after_threads(self, threads):
+        print("</body></html>")
+
     def handle_thread(self, thread):
         print(thread.to_mdom(self.ctx).to_html_str())
 
 
 class ThreadsToTextAction(SortedThreadsAction):
     def handle_thread(self, thread):
-        print(thread.to_mdom(self.ctx).to_text())
+        print(thread.to_mdom(self.ctx).to_text().strip())
+        print("-" * 50)
 
 
 ACTIONS = {

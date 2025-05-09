@@ -28,7 +28,7 @@ def node(tag, childs, attrib=None):
 
 
 def node_to_str(n):
-    return ET.tostring(n, encoding="utf-8", method="html")
+    return ET.tostring(n, encoding="utf-8", method="html").decode("utf-8")
 
 
 class Node:
@@ -63,13 +63,15 @@ class Ref(Node):
 
     def to_text(self):
         if self.type == "user" or self.type == "bot":
-            return f"@{self.text}"
+            return f"<@{self.text}>"
         elif self.type == "nouser":
-            return "@?"
+            return "@<?>"
         elif self.type == "channel":
-            return f"#{self.text}"
+            return f"<#{self.text}>"
+        elif self.text == self.target:
+            return f"<{self.text}>"
         else:
-            return f"[{self.text}]({self.target})"
+            return f"<{self.target}|{self.text}>"
 
 
 class Section(Node):
@@ -82,7 +84,7 @@ class Section(Node):
         return node("section", childs, {"class": self.type})
 
     def to_text(self):
-        return "\n\n".join(child.to_text() for child in self.childs)
+        return "\n" + "\n".join(child.to_text() for child in self.childs)
 
 
 class Block(Node):
@@ -95,7 +97,8 @@ class Block(Node):
         return node("div", childs, {"class": self.type})
 
     def to_text(self):
-        return "\n\n".join(child.to_text() for child in self.childs)
+        prefix = "\n" if self.type == "message" else ""
+        return prefix + "\n".join(child.to_text() for child in self.childs)
 
 
 class Paragraph(Block):
@@ -104,7 +107,7 @@ class Paragraph(Block):
         return node("p", childs, {"class": self.type})
 
     def to_text(self):
-        return "\n\n".join(child.to_text() for child in self.childs)
+        return "".join(child.to_text() for child in self.childs)
 
 
 class Preformatted(Block):
@@ -141,7 +144,7 @@ class Group(Block):
         return node("div", childs, {"class": self.type})
 
     def to_text(self):
-        return " ".join(child.to_text() for child in self.childs)
+        return " ".join(child.to_text() for child in self.childs) + "\n"
 
 
 class List(Node):
