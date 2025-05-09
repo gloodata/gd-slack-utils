@@ -3,7 +3,7 @@ from xml.etree import ElementTree as ET
 from markdownify import markdownify
 
 
-def node(tag, childs, attrib=None):
+def node(tag, childs, attrib=None) -> ET.Element:
     if attrib is None:
         attrib = {}
 
@@ -27,18 +27,18 @@ def node(tag, childs, attrib=None):
     return n
 
 
-def node_to_str(n):
+def node_to_str(n) -> str:
     return ET.tostring(n, encoding="utf-8", method="html").decode("utf-8")
 
 
 class Node:
-    def to_html(self):
+    def to_html(self) -> ET.Element:
         return node("span", "")
 
-    def to_html_str(self):
+    def to_html_str(self) -> str:
         return node_to_str(self.to_html())
 
-    def to_md(self):
+    def to_md(self) -> str:
         return markdownify(self.to_html_str())
 
     def to_text(self) -> str:

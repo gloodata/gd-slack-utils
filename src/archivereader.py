@@ -6,7 +6,7 @@ import argparse
 
 from enum import Enum
 from datetime import datetime
-from typing import List
+from typing import Self
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -256,7 +256,7 @@ class Message:
         text: str,
         team: str | None,
         blocks: list,
-        reactions: List[Reaction],
+        reactions: list[Reaction],
     ):
         self.type = type_
         self.user = user
@@ -297,7 +297,7 @@ class Message:
 
 
 class Thread:
-    def __init__(self, message: Message, replies: List[Message], channel: Channel):
+    def __init__(self, message: Message, replies: list[Message], channel: Channel):
         self.message = message
         self.replies = replies
         self.channel = channel
@@ -351,7 +351,7 @@ def blocks_from_text(text):
 
 class Block:
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> type[Self]:
         match d.get("type"):
             case "rich_text":
                 return BlockRichText.from_data(d, ctx)
@@ -365,7 +365,7 @@ class Block:
                 ctx.warn("unknown-block-type", dict(block=d))
                 return BlockUnknown(d)
 
-    def to_mdom(self, ctx: Context):
+    def to_mdom(self, ctx: Context) -> type[mdom.Node]:
         return mdom.Block("block", [])
 
 
@@ -374,26 +374,9 @@ class BlockUnknown(Block):
         self.data = data
 
 
-class RichTextElement:
-    @classmethod
-    def from_data(cls, d: dict, ctx: Context):
-        match d.get("type"):
-            case "rich_text_section":
-                return RichTextSection.from_data(d, ctx)
-            case "rich_text_list":
-                return RichTextList.from_data(d, ctx)
-            case "rich_text_quote":
-                return RichTextQuote.from_data(d, ctx)
-            case "rich_text_preformatted":
-                return RichTextPreformatted.from_data(d, ctx)
-            case _:
-                ctx.warn("unknown-rich-text-element-type", dict(element=d))
-                return RichTextUnknown(d)
-
-
 class RichTextSectionElement:
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> type[Self]:
         match d.get("type"):
             case "link":
                 return RichTextSectionElementLink.from_data(d, ctx)
@@ -417,12 +400,31 @@ class RichTextSectionElement:
         return mdom.Span("RichTextSectionElement", "")
 
 
-class RichTextSection(RichTextElement):
-    def __init__(self, elements: List[RichTextSectionElement]):
+class RichTextElement:
+    elements: list[type[RichTextSectionElement]]
+
+    def __init__(self, elements: list[type[RichTextSectionElement]]):
         self.elements = elements
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> type[Self]:
+        match d.get("type"):
+            case "rich_text_section":
+                return RichTextSection.from_data(d, ctx)
+            case "rich_text_list":
+                return RichTextList.from_data(d, ctx)
+            case "rich_text_quote":
+                return RichTextQuote.from_data(d, ctx)
+            case "rich_text_preformatted":
+                return RichTextPreformatted.from_data(d, ctx)
+            case _:
+                ctx.warn("unknown-rich-text-element-type", dict(element=d))
+                return RichTextUnknown(d)
+
+
+class RichTextSection(RichTextElement):
+    @classmethod
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         elements = [
             RichTextSectionElement.from_data(e, ctx) for e in d.get("elements", [])
         ]
@@ -434,11 +436,8 @@ class RichTextSection(RichTextElement):
 
 
 class RichTextQuote(RichTextElement):
-    def __init__(self, elements: List[RichTextSectionElement]):
-        self.elements = elements
-
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         elements = [
             RichTextSectionElement.from_data(e, ctx) for e in d.get("elements", [])
         ]
@@ -450,11 +449,8 @@ class RichTextQuote(RichTextElement):
 
 
 class RichTextPreformatted(RichTextElement):
-    def __init__(self, elements: List[RichTextSectionElement]):
-        self.elements = elements
-
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         elements = [
             RichTextSectionElement.from_data(e, ctx) for e in d.get("elements", [])
         ]
@@ -467,15 +463,19 @@ class RichTextPreformatted(RichTextElement):
 
 class RichTextList(RichTextElement):
     def __init__(
-        self, elements: List[RichTextSection], indent=0, offset=0, list_style="bullet"
+        self,
+        elements: list[type[RichTextSectionElement]],
+        indent=0,
+        offset=0,
+        list_style="bullet",
     ):
-        self.elements = elements
+        super().__init__(elements)
         self.indent = indent
         self.offset = offset
         self.list_style = list_style
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         indent = d.get("indent", 0)
         offset = d.get("offset", 0)
         list_style = d.get("style", "bullet")  # or ordered
@@ -503,7 +503,7 @@ class Style:
         self.unlink = unlink
 
     @classmethod
-    def from_data(cls, d: dict):
+    def from_data(cls, d: dict) -> Self:
         return cls(**d)
 
 
@@ -514,7 +514,7 @@ class RichTextSectionElementLink(RichTextSectionElement):
         self.style = style
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         url = d["url"]
         text = d.get("text")
         style = Style.from_data(d.get("style", {}))
@@ -540,7 +540,7 @@ class RichTextSectionElementText(RichTextSectionElement):
         self.style = style
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         def replace_match(match):
             shortcode = match.group(1)
             emoji = ctx.shortcode_to_emoji.get(shortcode)
@@ -561,7 +561,7 @@ class RichTextSectionElementEmoji(RichTextSectionElement):
         self.unicode = unicode
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         name = d["name"]
         unicode = d.get("unicode")
 
@@ -582,7 +582,7 @@ class RichTextSectionElementChannel(RichTextSectionElement):
         self.style = style
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         channel_id = d["channel_id"]
         channel = ctx.channels.from_id(channel_id)
         if channel is None:
@@ -602,7 +602,7 @@ class RichTextSectionElementUser(RichTextSectionElement):
         self.style = style
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         user_id = d["user_id"]
         user = ctx.users.from_id(user_id)
         if user is None:
@@ -621,7 +621,7 @@ class RichTextSectionElementBroadcast(RichTextSectionElement):
         self.range = b_range
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         b_range = d["range"]  # seen everyone and channel
         return cls(b_range)
 
@@ -634,7 +634,7 @@ class RichTextSectionElementColor(RichTextSectionElement):
         self.value = value
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         value = d["value"]  # seen #rrggbb
         return cls(value)
 
@@ -647,7 +647,7 @@ class RichTextSectionElementUnknown(RichTextSectionElement):
         self.data = data
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         return cls(d)
 
     def to_mdom(self, ctx: Context):
@@ -663,11 +663,11 @@ class RichTextUnknown(RichTextElement):
 
 
 class BlockRichText(Block):
-    def __init__(self, elements: List[RichTextElement]):
+    def __init__(self, elements: list[type[RichTextElement]]):
         self.elements = elements
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         elements = [RichTextElement.from_data(e, ctx) for e in d.get("elements", [])]
         return cls(elements)
 
@@ -681,7 +681,7 @@ class BlockSection(Block):
         pass
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         # poll stuff
         return cls()
 
@@ -694,7 +694,7 @@ class BlockContext(Block):
         pass
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         # {'type': 'context', 'block_id': 'vfA', 'elements': [{'type':
         # 'mrkdwn', 'text': 'Created by <@UC...> with /poll', 'verbatim':
         # False}]}
@@ -709,7 +709,7 @@ class BlockActions(Block):
         self.data = data
 
     @classmethod
-    def from_data(cls, d: dict, ctx: Context):
+    def from_data(cls, d: dict, ctx: Context) -> Self:
         # {'type': 'actions', 'block_id': 'add_option_to_poll&1...',
         # 'elements': [{'type': 'button', 'action_id': 'open_unified_modal',
         # 'text': {'type': 'plain_text', 'text': 'Open', 'emoji': True},
@@ -784,7 +784,7 @@ def foc_history_channel_extractor(path, base_path):
 
 class BaseAction:
     cur_file: Path | None
-    cur_channel: Channel | None
+    cur_channel: Channel
 
     def __init__(self, channel_extractor=archive_channel_extractor):
         self.channel_extractor = channel_extractor
@@ -793,7 +793,7 @@ class BaseAction:
         self.ctx = Context(Users({}, {}), Channels({}, {}), {})
 
         self.cur_file = None
-        self.cur_channel = None
+        self.cur_channel = Channel("?", "?", False, {})
 
     def before_all(self, base_path, ctx):
         self.base_path = base_path
@@ -809,7 +809,7 @@ class BaseAction:
 
     def after_file(self):
         self.cur_file = None
-        self.cur_channel = None
+        self.cur_channel = Channel("?", "?", False, {})
 
     def on_msg(self, msg):
         if msg.get("type") == "message":
