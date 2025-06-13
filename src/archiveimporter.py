@@ -1,8 +1,9 @@
-import os
 import argparse
+import os
 
-from archivereader import RethreadAction, walk_archive, ARCHIVE_TYPES
 import meilisearch
+
+from archivereader import ARCHIVE_TYPES, RethreadAction, walk_archive
 
 MS_URL_KEY = "MS_URL"
 MS_URL_DEFAULT = "http://127.0.0.1:7700"

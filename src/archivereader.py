@@ -1,17 +1,15 @@
-import re
-import sys
-import json
-import sqlite3
 import argparse
-
-from enum import Enum
-from datetime import datetime
-from typing import Self
-from pathlib import Path
+import json
+import re
+import sqlite3
+import sys
 from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Self
 
-from urltitle import URLTitleReader, URLTitleError
-
+from urltitle import URLTitleError, URLTitleReader
 
 import mdom
 
@@ -733,13 +731,13 @@ def parse_users(path):
     with open(path, "r", encoding="utf-8") as handle:
         items = json.load(handle)
         for info in items:
-            id_ = info.get("id")
+            user_id = info.get("id")
             real_name = info.get("real_name")
             display_name = info.get("profile", {}).get("display_name")
-            name = display_name or real_name or info.get("name") or id_
-            user = User(id_, name, info)
+            name = display_name or real_name or info.get("name") or user_id
+            user = User(user_id, name, info)
             by_name[name] = user
-            by_id[id_] = user
+            by_id[user_id] = user
 
     users = Users(by_name, by_id)
     users.add_slackbot()
