@@ -87,6 +87,8 @@ class Context:
             ]
 
         blocks = [Block.from_data(block, self) for block in raw_blocks]
+        attachments = [Attachment.from_data(a)
+                       for a in d.get("attachments", [])]
 
         if user_id is None:
             if t == MessageType.BOT_MESSAGE:
@@ -109,7 +111,7 @@ class Context:
         assert ts is not None
         assert text is not None
 
-        return Message(t, user, ts, thread_ts, text, team, blocks, reactions)
+        return Message(t, user, ts, thread_ts, text, team, blocks, reactions, attachments)
 
     @classmethod
     def from_base_path(cls, base_path):
@@ -244,6 +246,98 @@ class Reaction:
     count: int = 1
 
 
+class Image:
+    def __init__(self, url, width, height, title):
+        self.url = url
+        self.width = width
+        self.height = height
+        self.title = title
+
+    @classmethod
+    def from_thumb_data(cls, d, title=None):
+        return cls(d.get("thumb_url", ""), d.get("thumb_width"), d.get("thumb_height"), title)
+
+    @classmethod
+    def from_image_data(cls, d, title=None):
+        return cls(d.get("image_url", ""), d.get("image_width"), d.get("image_height"), title)
+
+    def to_mdom(self, ctx: Context):
+        return mdom.Image(self.url, self.width, self.height, self.title)
+
+
+SERVICE_EMOJI = {
+    "YouTube": "🎥",
+    "Twitter": "🐦",
+    "twitter": "🐦",
+    "twitter.com": "🐦",
+    "X (formerly Twitter)": "🐦",
+    "GitHub": "🧑‍💻",
+    "Vimeo": "🎥",
+    "arXiv.org": "📔",
+    "Loom": "🎥",
+    "Mastodon": "🐘",
+    "lobste.rs": "🦞",
+    "Twitch": "🎥",
+    "bluesky": "🦋",
+    "Medium": "📝"
+}
+
+DEFAULT_SERVICE_EMOJI = "📝"
+
+
+class Attachment:
+    def __init__(self, title, text, url, service_name, thumb, image):
+        self.title = title
+        self.text = text
+        self.url = url
+        self.service_name = service_name
+        self.thumb = thumb
+        self.image = image
+
+    def to_mdom(self, ctx: Context):
+        icon = SERVICE_EMOJI.get(self.service_name, DEFAULT_SERVICE_EMOJI)
+
+        if self.url:
+            title = mdom.Ref("link", self.url, f"{icon} {self.title}")
+        else:
+            title = mdom.Span("title", f"{icon} {self.title}")
+
+        childs = [title]
+
+        if self.text:
+            childs.append(mdom.Quote([mdom.Span("text", self.text)]))
+
+        if self.thumb:
+            childs.append(self.thumb.to_mdom(ctx))
+
+        if self.image:
+            childs.append(self.image.to_mdom(ctx))
+
+        return mdom.Section("attachment", childs)
+
+    @classmethod
+    def from_data(cls, d):
+        title = d.get("title", d.get("fallback"))
+        text = d.get("text", "")
+        service_name = d.get("service_name", "")
+
+        from_url = d.get("from_url")
+        original_url = d.get("original_url")
+        title_link = d.get("title_link")
+
+        url = from_url or original_url or title_link
+
+        thumb = None
+        if d.get("thumb_url"):
+            thumb = Image.from_thumb_data(d, title)
+
+        image = None
+        if d.get("image_url"):
+            image = Image.from_image_data(d, title)
+
+        return cls(title, text, url, service_name, thumb, image)
+
+
 class Message:
     def __init__(
         self,
@@ -255,6 +349,7 @@ class Message:
         team: str | None,
         blocks: list,
         reactions: list[Reaction],
+        attachments: list[Attachment]
     ):
         self.type = type_
         self.user = user
@@ -265,11 +360,13 @@ class Message:
         self.team = team
         self.blocks = blocks
         self.reactions = reactions
+        self.attachments = attachments
 
     def get_emojis(self):
         items = []
         walk_blocks_for_leaf_instance(
-            self.blocks, RichTextSectionElementEmoji, lambda e: items.append(e.name)
+            self.blocks, RichTextSectionElementEmoji, lambda e: items.append(
+                e.name)
         )
         return items
 
@@ -284,12 +381,16 @@ class Message:
         childs = [
             mdom.Group(
                 "msg-head",
-                [mdom.Span("isodate", self.dt.isoformat()), self.user.to_mdom(ctx)],
+                [mdom.Span("isodate", self.dt.isoformat()),
+                 self.user.to_mdom(ctx)],
             )
         ]
 
         for block in self.blocks:
             childs.append(block.to_mdom(ctx))
+
+        for attachment in self.attachments:
+            childs.append(attachment.to_mdom(ctx))
 
         return mdom.Block("message", childs)
 
@@ -308,7 +409,8 @@ class Thread:
     def to_mdom(self, ctx: Context):
         childs = [
             self.message.to_mdom(ctx),
-            mdom.Block("replies", [reply.to_mdom(ctx) for reply in self.replies]),
+            mdom.Block("replies", [reply.to_mdom(ctx)
+                       for reply in self.replies]),
         ]
         return mdom.Section("thread", childs)
 
@@ -337,7 +439,7 @@ def parse_raw_slack_text_field_to_json(text):
     for match in RE_BETWEEN_LT_AND_GT.finditer(text):
         if match.start() > last_end:
             parsed_elements.append(
-                {"type": "text", "text": text[last_end : match.start()]}
+                {"type": "text", "text": text[last_end: match.start()]}
             )
         parsed_elements.append(parse_element(match.group(1)))
         last_end = match.end()
@@ -484,7 +586,8 @@ class RichTextList(RichTextElement):
         list_style = d.get("style", "bullet")  # or ordered
 
         # NOTE: it's RichTextSection not RichTextSectionElement like others
-        elements = [RichTextSection.from_data(e, ctx) for e in d.get("elements", [])]
+        elements = [RichTextSection.from_data(
+            e, ctx) for e in d.get("elements", [])]
         return cls(elements, indent, offset, list_style)
 
     def to_mdom(self, ctx: Context):
@@ -671,7 +774,8 @@ class BlockRichText(Block):
 
     @classmethod
     def from_data(cls, d: dict, ctx: Context) -> Self:
-        elements = [RichTextElement.from_data(e, ctx) for e in d.get("elements", [])]
+        elements = [RichTextElement.from_data(
+            e, ctx) for e in d.get("elements", [])]
         return cls(elements)
 
     def to_mdom(self, ctx: Context):
@@ -891,7 +995,8 @@ class ToLinkStatsAction(BaseAction):
 
     def after_all(self):
         reader = URLTitleReader(verify_ssl=False)
-        items = sorted(self.link_count.items(), key=lambda x: x[1], reverse=True)
+        items = sorted(self.link_count.items(),
+                       key=lambda x: x[1], reverse=True)
         for url, count in items:
             link = self.link_by_url[url]
             try:
@@ -1097,14 +1202,15 @@ class ToSQLite(RethreadAction):
 
         print("Inserting users")
         self.insert_users(
-            [dict(id=item.id, name=item.name) for item in self.ctx.users.by_id.values()]
+            [dict(id=item.id, name=item.name)
+             for item in self.ctx.users.by_id.values()]
         )
 
         print("Inserting threads")
         threads = self.get_sorted_messages_by_ts()
         link_info = LinkCollector()
         for i in range(0, len(threads), self.batch_size):
-            batch = threads[i : i + self.batch_size]
+            batch = threads[i: i + self.batch_size]
             rows = [self.thread_to_db_record(thread) for thread in batch]
             if rows:
                 print(batch[0].message.dt)
@@ -1119,7 +1225,8 @@ class ToSQLite(RethreadAction):
                     link_info.handle_thread(t)
                     mdoms.append((ts, node))
                     for r in t.message.reactions:
-                        reactions.append(dict(ts=ts, name=r.name, count=r.count))
+                        reactions.append(
+                            dict(ts=ts, name=r.name, count=r.count))
 
                 self.insert_reactions(reactions)
 
@@ -1259,6 +1366,59 @@ class ThreadsToLinksAction(SortedThreadsAction):
             print(info.link.url, info.count, info.refs)
 
 
+class CountFields(BaseAction):
+    def __init__(self):
+        super().__init__()
+        self.count = {}
+        self.fields_to_count = {"service_name"}
+        self.field_value_count = {}
+
+    def on_msg(self, msg):
+        if msg.get("type") == "message":
+            for attachment in msg.get("attachments", []):
+                for field in attachment.keys():
+                    if field not in self.count:
+                        self.count[field] = 0
+
+                    self.count[field] += 1
+
+                    if field in self.fields_to_count:
+                        value = attachment[field]
+                        counts = self.field_value_count.get(field)
+                        if counts is None:
+                            counts = {}
+                            self.field_value_count[field] = counts
+
+                        if value not in counts:
+                            counts[value] = 0
+
+                        counts[value] += 1
+
+    def after_all(self):
+        super().after_all()
+
+        def print_sorted_dict(d):
+            for field, count in sorted(d.items(), key=lambda x: x[1], reverse=True):
+                print(f"{field}: {count}")
+
+        print_sorted_dict(self.count)
+        for field in self.field_value_count:
+            print("-" * 30)
+            print(field)
+            print_sorted_dict(self.field_value_count[field])
+
+
+class AttachmentsToMdAction(BaseAction):
+    def on_message(self, msg):
+        for attachment in msg.attachments:
+            try:
+                print(attachment.to_mdom(self.ctx).to_md())
+                print()
+            except Exception as err:
+                print("BAD ATTACHMENT", err)
+                print()
+
+
 ACTIONS = {
     "parse": ParseAction,
     "html": ToHTMLAction,
@@ -1272,11 +1432,14 @@ ACTIONS = {
     "linkstats": ToLinkStatsAction,
     "rethread": RethreadAction,
     "to-sqlite": ToSQLite,
+    "count-fields": CountFields,
+    "attachments-to-md": AttachmentsToMdAction
 }
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Process slack archive files.")
+    parser = argparse.ArgumentParser(
+        description="Process slack archive files.")
     parser.add_argument("action", help="Action to do on each entry")
     parser.add_argument(
         "dir_tree_type",

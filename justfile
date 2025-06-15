@@ -15,6 +15,8 @@ archive-threads-to-links: (archive-action "threads-to-links")
 archive-rethread: (archive-action "html")
 archive-emojistats: (archive-action "emojistats")
 archive-linkstats: (archive-action "linkstats")
+archive-count-fields: (archive-action "count-fields")
+archive-attachments-to-md: (archive-action "attachments-to-md")
 
 archive-to-sqlite:
     rm -f slack.sqlite

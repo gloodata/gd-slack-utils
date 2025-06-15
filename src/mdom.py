@@ -1,4 +1,5 @@
 from xml.etree import ElementTree as ET
+from typing import Optional
 
 from markdownify import markdownify
 
@@ -186,3 +187,31 @@ class Span(Node):
             return self.text.replace("T", " ").split(".")[0]
 
         return self.text
+
+
+class Image(Node):
+    def __init__(self, url: str, width: Optional[int], height: Optional[int], title: Optional[str]):
+        self.url = url
+        self.width = width
+        self.height = height
+        self.title = title
+
+    def to_html(self):
+        attrs = {
+            "src": self.url,
+        }
+
+        if self.title:
+            attrs["alt"] = self.title
+
+        if self.width:
+            attrs["width"] = str(self.width)
+
+        if self.height:
+            attrs["height"] = str(self.height)
+
+        return node("img", [], attrs)
+
+    def to_text(self):
+        title = self.title or self.url
+        return f"![{title}]({self.url})"
