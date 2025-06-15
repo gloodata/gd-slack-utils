@@ -2,3 +2,9 @@ __pycache__
 /NOTES.md
 /slack_archive
 .env
+/users.json
+/channels.json
+/attachments
+/conversations.json
+/conversations.md
+/slack.sqlite

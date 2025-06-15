@@ -139,8 +139,7 @@ class SlackAPIImporter:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-            print(f"✓ Fetched {len(output_data)
-                               } channels and saved to {output_path}")
+            print(f"✓ Fetched {len(output_data)} channels and saved to {output_path}")
 
         except SlackApiError as e:
             print(f"Error fetching channels: {e.response['error']}")
@@ -157,8 +156,7 @@ class SlackAPIImporter:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-            print(f"✓ Fetched {len(output_data)
-                               } users and saved to {output_path}")
+            print(f"✓ Fetched {len(output_data)} users and saved to {output_path}")
 
         except SlackApiError as e:
             print(f"Error fetching users: {e.response['error']}")
@@ -246,8 +244,7 @@ class SlackAPIImporter:
                     self._handle_rate_limit(retry_after)
                     continue
                 else:
-                    print(f"    Error fetching messages from #{
-                          channel_name}: {e}")
+                    print(f"    Error fetching messages from #{channel_name}: {e}")
                     break
 
         return {
@@ -271,8 +268,7 @@ class SlackAPIImporter:
             from_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(
                 tzinfo=timezone.utc
             )
-            to_dt = datetime.strptime(
-                to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            to_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             # Add one day to to_date to include the entire day
             to_dt = to_dt + timedelta(days=1)
         except ValueError as e:
@@ -291,8 +287,7 @@ class SlackAPIImporter:
             channel_id = self._get_channel_id_by_name(channel_name)
 
             if not channel_id:
-                print(f"  ✗ Channel '{
-                      channel_name}' not found or not accessible")
+                print(f"  ✗ Channel '{channel_name}' not found or not accessible")
                 failed_channels.append(channel_name)
                 continue
 
@@ -302,8 +297,7 @@ class SlackAPIImporter:
                 )
                 conversations.append(channel_data)
                 successful_channels.append(channel_name)
-                print(f"    ✓ Fetched {
-                      len(channel_data['messages'])} messages")
+                print(f"    ✓ Fetched {len(channel_data['messages'])} messages")
 
             except Exception as e:
                 print(f"  ✗ Failed to fetch from #{channel_name}: {e}")
@@ -315,25 +309,35 @@ class SlackAPIImporter:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-        print(f"✓ Fetched conversations from {
-              len(successful_channels)} channels and saved to {output_path}")
+        print(
+            f"✓ Fetched conversations from {
+                len(successful_channels)
+            } channels and saved to {output_path}"
+        )
         if failed_channels:
-            print(f"✗ Failed to fetch from {len(failed_channels)} channels: {
-                  ', '.join(failed_channels)}")
+            print(
+                f"✗ Failed to fetch from {len(failed_channels)} channels: {
+                    ', '.join(failed_channels)
+                }"
+            )
 
-    def _download_file(self, file_url: str, file_path: str, headers: Dict[str, str]) -> bool:
+    def _download_file(
+        self, file_url: str, file_path: str, headers: Dict[str, str]
+    ) -> bool:
         """Download a file from URL to local path with authentication headers."""
         try:
             request = urllib.request.Request(file_url, headers=headers)
             with urllib.request.urlopen(request) as response:
-                with open(file_path, 'wb') as f:
+                with open(file_path, "wb") as f:
                     f.write(response.read())
             return True
         except Exception as e:
             print(f"    Error downloading file: {e}")
             return False
 
-    def _fetch_files_in_date_range(self, from_ts: float, to_ts: float) -> List[Dict[str, Any]]:
+    def _fetch_files_in_date_range(
+        self, from_ts: float, to_ts: float
+    ) -> List[Dict[str, Any]]:
         """Fetch all files within the specified date range."""
         print("  Fetching files list...")
 
@@ -346,7 +350,7 @@ class SlackAPIImporter:
                     ts_from=str(int(from_ts)),
                     ts_to=str(int(to_ts)),
                     count=100,
-                    page=page
+                    page=page,
                 )
 
                 files = response.get("files", [])
@@ -373,7 +377,9 @@ class SlackAPIImporter:
 
         return all_files
 
-    def _filter_files_by_channels(self, files: List[Dict[str, Any]], channel_ids: List[str]) -> List[Dict[str, Any]]:
+    def _filter_files_by_channels(
+        self, files: List[Dict[str, Any]], channel_ids: List[str]
+    ) -> List[Dict[str, Any]]:
         """Filter files to only include those from specified channels."""
         filtered_files = []
 
@@ -406,8 +412,7 @@ class SlackAPIImporter:
             from_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(
                 tzinfo=timezone.utc
             )
-            to_dt = datetime.strptime(
-                to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            to_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             to_dt = to_dt + timedelta(days=1)
         except ValueError as e:
             print(f"Error parsing dates: {e}")
@@ -432,8 +437,7 @@ class SlackAPIImporter:
                 channel_ids.append(channel_id)
                 channel_name_to_id[channel_id] = channel_name
             else:
-                print(f"  ✗ Channel '{
-                      channel_name}' not found or not accessible")
+                print(f"  ✗ Channel '{channel_name}' not found or not accessible")
                 failed_channels.append(channel_name)
 
         if not channel_ids:
@@ -458,8 +462,8 @@ class SlackAPIImporter:
 
         # Prepare authentication headers for file downloads
         headers = {
-            'Authorization': f'Bearer {self.token}',
-            'User-Agent': 'Slack API Importer'
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "Slack API Importer",
         }
 
         # Download files
@@ -470,8 +474,9 @@ class SlackAPIImporter:
         for file_info in channel_files:
             file_id = file_info.get("id")
             file_name = file_info.get("name", f"file_{file_id}")
-            file_url = file_info.get(
-                "url_private_download") or file_info.get("url_private")
+            file_url = file_info.get("url_private_download") or file_info.get(
+                "url_private"
+            )
 
             if not file_url:
                 print(f"    ✗ No download URL found for file: {file_name}")
@@ -495,32 +500,35 @@ class SlackAPIImporter:
 
             # Create safe filename
             safe_filename = "".join(
-                c for c in file_name if c.isalnum() or c in "._- ").strip()
+                c for c in file_name if c.isalnum() or c in "._- "
+            ).strip()
             if not safe_filename:
                 safe_filename = f"file_{file_id}"
 
             # Add timestamp prefix to avoid conflicts
-            timestamp = datetime.fromtimestamp(file_info.get(
-                "timestamp", 0)).strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.fromtimestamp(file_info.get("timestamp", 0)).strftime(
+                "%Y%m%d_%H%M%S"
+            )
             final_filename = f"{timestamp}_{safe_filename}"
 
             file_path = channel_dir / final_filename
 
-            print(f"    Downloading: {
-                  file_name} -> {channel_folder}/{final_filename}")
+            print(f"    Downloading: {file_name} -> {channel_folder}/{final_filename}")
 
             if self._download_file(file_url, str(file_path), headers):
                 downloaded_count += 1
 
                 # Store metadata
-                files_metadata.append({
-                    "file_id": file_id,
-                    "original_name": file_name,
-                    "downloaded_name": final_filename,
-                    "channel": channel_folder,
-                    "local_path": str(file_path.relative_to(output_dir)),
-                    "file_info": file_info
-                })
+                files_metadata.append(
+                    {
+                        "file_id": file_id,
+                        "original_name": file_name,
+                        "downloaded_name": final_filename,
+                        "channel": channel_folder,
+                        "local_path": str(file_path.relative_to(output_dir)),
+                        "file_info": file_info,
+                    }
+                )
             else:
                 failed_downloads.append(file_name)
 
@@ -534,14 +542,72 @@ class SlackAPIImporter:
         print(f"✓ Metadata saved to {metadata_file}")
 
         if failed_downloads:
-            print(f"✗ Failed to download {len(failed_downloads)} files: {
-                  ', '.join(failed_downloads[:5])}")
+            print(
+                f"✗ Failed to download {len(failed_downloads)} files: {
+                    ', '.join(failed_downloads[:5])
+                }"
+            )
             if len(failed_downloads) > 5:
                 print(f"    ... and {len(failed_downloads) - 5} more")
 
         if failed_channels:
-            print(f"✗ Could not access {len(failed_channels)} channels: {
-                  ', '.join(failed_channels)}")
+            print(
+                f"✗ Could not access {len(failed_channels)} channels: {
+                    ', '.join(failed_channels)
+                }"
+            )
+
+
+CHANNEL_NAME_TO_TITLE = {
+    "two-minute-week": "Two Minute Week",
+    "share-your-work": "Share Your Work",
+    "reading-together": "Reading Together",
+    "thinking-together": "Thinking Together",
+    "linking-together": "Linking Together",
+    "devlog-together": "DevLog Together",
+    "present-company": "Present Company",
+    "of-end-user-programming": "End User Programming",
+    "of-graphics": "Graphics",
+    "of-music": "Music",
+    "of-logic-programming": "Logic Programming",
+    "of-functional-programming": "Functional Programming",
+    "of-ai": "AI",
+}
+
+
+def conversations_to_md(input_file: str, base_path: str = ".") -> None:
+    """Convert conversations JSON to Markdown format."""
+    try:
+        with open(input_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"✗ Error: Input file '{input_file}' not found")
+        return
+    except json.JSONDecodeError as e:
+        print(f"✗ Error: Invalid JSON in '{input_file}': {e}")
+        return
+    except Exception as e:
+        print(f"✗ Error reading file '{input_file}': {e}")
+        return
+
+    ctx = Context.from_base_path(base_path)
+
+    for channel_data in data:
+        channel_name = channel_data.get("channel_name", "Unknown Channel")
+        channel_title = CHANNEL_NAME_TO_TITLE.get(channel_name, channel_name)
+        messages = channel_data.get("messages", [])
+
+        if not messages:
+            continue
+
+        print(f"\n# {channel_title}")
+        print()
+
+        for message in messages:
+            msg = ctx.message_from_data(message)
+            print()
+            print(msg.to_mdom(ctx).to_md())
+            print()
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -555,15 +621,14 @@ Examples:
   %(prog)s fetch-users --output team_members.json
   %(prog)s fetch-conversations --channels general,random --from-date 2024-01-01 --to-date 2024-01-07
   %(prog)s fetch-attachments --channels general,random --from-date 2024-01-01 --to-date 2024-01-07 --output ./downloads
+  %(prog)s conversations-to-md --input conversations.json
         """,
     )
 
-    subparsers = parser.add_subparsers(
-        dest="command", help="Available commands")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # fetch-channels subcommand
-    channels_parser = subparsers.add_parser(
-        "fetch-channels", help="Fetch all channels")
+    channels_parser = subparsers.add_parser("fetch-channels", help="Fetch all channels")
     channels_parser.add_argument(
         "--output",
         "-o",
@@ -628,6 +693,17 @@ Examples:
         help="Output directory path (default: attachments)",
     )
 
+    # conversations-to-md subcommand
+    md_parser = subparsers.add_parser(
+        "conversations-to-md", help="Convert conversations JSON to Markdown format"
+    )
+    md_parser.add_argument(
+        "--input",
+        "-i",
+        default="conversations.json",
+        help="Input JSON file path (default: conversations.json)",
+    )
+
     return parser
 
 
@@ -641,6 +717,12 @@ def main() -> None:
         sys.exit(1)
 
     try:
+        # Handle conversations-to-md without requiring Slack token
+        if args.command == "conversations-to-md":
+            conversations_to_md(args.input)
+            return
+
+        # For all other commands, initialize with Slack token
         importer = SlackAPIImporter()
 
         if args.command == "fetch-channels":
