@@ -190,7 +190,13 @@ class Span(Node):
 
 
 class Image(Node):
-    def __init__(self, url: str, width: Optional[int], height: Optional[int], title: Optional[str]):
+    def __init__(
+        self,
+        url: str,
+        width: Optional[int],
+        height: Optional[int],
+        title: Optional[str],
+    ):
         self.url = url
         self.width = width
         self.height = height
