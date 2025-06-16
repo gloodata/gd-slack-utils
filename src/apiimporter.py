@@ -475,7 +475,6 @@ class SlackAPIImporter:
         # Download files
         downloaded_count = 0
         failed_downloads = []
-        files_metadata = []
 
         for file_info in channel_files:
             file_id = file_info.get("id")
@@ -483,69 +482,35 @@ class SlackAPIImporter:
             file_url = file_info.get("url_private_download") or file_info.get(
                 "url_private"
             )
+            filetype = file_info.get("filetype", "")
 
             if not file_url:
                 print(f"    ✗ No download URL found for file: {file_name}")
                 failed_downloads.append(file_name)
                 continue
 
-            # Determine which channel this file belongs to (use the first one if multiple)
-            file_channels = file_info.get("channels", [])
-            file_groups = file_info.get("groups", [])
-            file_ims = file_info.get("ims", [])
+            # Create folder based on first 3 characters of file ID
+            folder_name = file_id[:3] if file_id and len(file_id) >= 3 else "unk"
+            id_dir = output_dir / folder_name
+            id_dir.mkdir(exist_ok=True)
 
-            channel_folder = "unknown"
-            for channel_id in file_channels + file_groups + file_ims:
-                if channel_id in channel_name_to_id:
-                    channel_folder = channel_name_to_id[channel_id]
-                    break
+            # Create filename using ID and filetype extension
+            if filetype:
+                final_filename = f"{file_id}.{filetype}"
+            else:
+                final_filename = file_id
 
-            # Create channel subdirectory
-            channel_dir = output_dir / channel_folder
-            channel_dir.mkdir(exist_ok=True)
+            file_path = id_dir / final_filename
 
-            # Create safe filename
-            safe_filename = "".join(
-                c for c in file_name if c.isalnum() or c in "._- "
-            ).strip()
-            if not safe_filename:
-                safe_filename = f"file_{file_id}"
-
-            # Add timestamp prefix to avoid conflicts
-            timestamp = datetime.fromtimestamp(file_info.get("timestamp", 0)).strftime(
-                "%Y%m%d_%H%M%S"
-            )
-            final_filename = f"{timestamp}_{safe_filename}"
-
-            file_path = channel_dir / final_filename
-
-            print(f"    Downloading: {file_name} -> {channel_folder}/{final_filename}")
+            print(f"    Downloading: {file_name} -> {folder_name}/{final_filename}")
 
             if self._download_file(file_url, str(file_path), headers):
                 downloaded_count += 1
-
-                # Store metadata
-                files_metadata.append(
-                    {
-                        "file_id": file_id,
-                        "original_name": file_name,
-                        "downloaded_name": final_filename,
-                        "channel": channel_folder,
-                        "local_path": str(file_path.relative_to(output_dir)),
-                        "file_info": file_info,
-                    }
-                )
             else:
                 failed_downloads.append(file_name)
 
-        # Save metadata file
-        metadata_file = output_dir / "files_metadata.json"
-        with open(metadata_file, "w", encoding="utf-8") as f:
-            json.dump(files_metadata, f, indent=2, ensure_ascii=False)
-
         # Print summary
         print(f"✓ Downloaded {downloaded_count} files to {output_path}")
-        print(f"✓ Metadata saved to {metadata_file}")
 
         if failed_downloads:
             print(

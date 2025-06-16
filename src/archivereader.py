@@ -4,7 +4,7 @@ import re
 import sqlite3
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Self
@@ -364,9 +364,7 @@ class Attachment:
         childs = [mdom.Paragraph("attachment-title", [self.title_to_mdom()])]
 
         if self.text:
-            childs.append(
-                mdom.Quote([mdom.Span("text", self.text)])
-            )
+            childs.append(mdom.Quote([mdom.Span("text", self.text)]))
 
         if self.thumb:
             childs.append(self.thumb.to_mdom(ctx))
