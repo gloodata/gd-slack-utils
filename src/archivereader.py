@@ -294,6 +294,11 @@ DEFAULT_SERVICE_EMOJI = "📝"
 FILE_EMOJI = {
     "mp4": "🎥",
     "mov": "🎥",
+    "webp": "📷",
+    "png": "📷",
+    "jpg": "📷",
+    "jpeg": "📷",
+    "gif": "📷",
 }
 
 DEFAULT_FILE_EMOJI = "📄"
@@ -327,6 +332,7 @@ class File:
     def title_to_mdom(self):
         icon = FILE_EMOJI.get(self.filetype, DEFAULT_FILE_EMOJI)
 
+        # TODO: if it's image make an image tag
         if self.url:
             title = mdom.Ref("link", self.url, f"{icon} {self.title}")
         else:
@@ -359,7 +365,7 @@ class Attachment:
 
         if self.text:
             childs.append(
-                mdom.Paragraph("attachment-text", [mdom.Span("text", self.text)])
+                mdom.Quote([mdom.Span("text", self.text)])
             )
 
         if self.thumb:
@@ -405,7 +411,7 @@ class Message:
         blocks: list,
         reactions: list[Reaction],
         attachments: list[Attachment],
-        files: list[File]
+        files: list[File],
     ):
         self.type = type_
         self.user = user
