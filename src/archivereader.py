@@ -89,6 +89,7 @@ class Context:
 
         blocks = [Block.from_data(block, self) for block in raw_blocks]
         attachments = [Attachment.from_data(a) for a in d.get("attachments", [])]
+        files = [File.from_data(a) for a in d.get("files", [])]
 
         if user_id is None:
             if t == MessageType.BOT_MESSAGE:
@@ -112,7 +113,7 @@ class Context:
         assert text is not None
 
         return self.Message(
-            t, user, ts, thread_ts, text, team, blocks, reactions, attachments
+            t, user, ts, thread_ts, text, team, blocks, reactions, attachments, files
         )
 
     @classmethod
@@ -290,6 +291,49 @@ SERVICE_EMOJI = {
 
 DEFAULT_SERVICE_EMOJI = "📝"
 
+FILE_EMOJI = {
+    "mp4": "🎥",
+    "mov": "🎥",
+}
+
+DEFAULT_FILE_EMOJI = "📄"
+
+
+class File:
+    def __init__(self, id, name, title, mimetype, filetype, url):
+        self.id = id
+        self.name = name
+        self.title = title
+        self.mimetype = mimetype
+        self.filetype = filetype
+        self.url = url
+
+    @classmethod
+    def from_data(cls, d):
+        name = d.get("name", "?")
+        return cls(
+            d.get("id"),
+            name,
+            d.get("title", name),
+            d.get("mimetype", "octet/stream"),
+            d.get("filetype", ""),
+            d.get("permalink_public"),
+        )
+
+    def to_mdom(self, ctx: Context):
+        childs = [mdom.Paragraph("file-title", [self.title_to_mdom()])]
+        return mdom.Section("file", childs)
+
+    def title_to_mdom(self):
+        icon = FILE_EMOJI.get(self.filetype, DEFAULT_FILE_EMOJI)
+
+        if self.url:
+            title = mdom.Ref("link", self.url, f"{icon} {self.title}")
+        else:
+            title = mdom.Span("title", f"{icon} {self.title}")
+
+        return title
+
 
 class Attachment:
     def __init__(self, title, text, url, service_name, thumb, image):
@@ -361,6 +405,7 @@ class Message:
         blocks: list,
         reactions: list[Reaction],
         attachments: list[Attachment],
+        files: list[File]
     ):
         self.type = type_
         self.user = user
@@ -372,6 +417,7 @@ class Message:
         self.blocks = blocks
         self.reactions = reactions
         self.attachments = attachments
+        self.files = files
 
     def get_emojis(self):
         items = []
@@ -400,6 +446,9 @@ class Message:
 
         for attachment in self.attachments:
             childs.append(attachment.to_mdom(ctx))
+
+        for file in self.files:
+            childs.append(file.to_mdom(ctx))
 
         return mdom.Block("message", childs)
 

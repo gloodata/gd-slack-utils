@@ -606,6 +606,9 @@ def format_thread_archive_url(dt, channel_name):
 
     return f"https://history.futureofcoding.org/history/weekly/{year}/{month}/{week}/{channel_name}.html#{msg_ts}"
 
+def format_msg_file_url(file):
+    prefix = file.id[0:3]
+    return f"https://history.futureofcoding.org/history/msg_files/{prefix}/{file.id}.{file.filetype}"
 
 class NewsletterMessage(Message):
     def to_mdom(self, ctx: Context, channel_name: str):
@@ -642,6 +645,10 @@ class NewsletterMessage(Message):
 
         for attachment in self.attachments:
             childs.append(attachment.to_mdom(ctx))
+
+        for file in self.files:
+            file.url = format_msg_file_url(file)
+            childs.append(file.to_mdom(ctx))
 
         return mdom.Block("message", childs)
 
