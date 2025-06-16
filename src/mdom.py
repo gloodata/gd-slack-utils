@@ -1,7 +1,7 @@
 from xml.etree import ElementTree as ET
 from typing import Optional
 
-from markdownify import markdownify
+from markdownify import markdownify, ATX
 
 
 def node(tag, childs, attrib=None) -> ET.Element:
@@ -40,7 +40,7 @@ class Node:
         return node_to_str(self.to_html())
 
     def to_md(self) -> str:
-        return markdownify(self.to_html_str())
+        return markdownify(self.to_html_str(), heading_style=ATX)
 
     def to_text(self) -> str:
         return "?"
@@ -100,6 +100,20 @@ class Block(Node):
     def to_text(self):
         prefix = "\n" if self.type == "message" else ""
         return prefix + "\n".join(child.to_text() for child in self.childs)
+
+
+class Heading(Node):
+    def __init__(self, level: int, childs):
+        self.level = level
+        self.childs = childs
+
+    def to_html(self):
+        childs = [child.to_html() for child in self.childs]
+        return node(f"h{self.level}", childs, {})
+
+    def to_text(self):
+        prefix = "\n" + ("#" * self.level) + " "
+        return prefix + "  ".join(child.to_text() for child in self.childs)
 
 
 class Paragraph(Block):
@@ -178,6 +192,8 @@ class Span(Node):
         if self.type == "isodate":
             text = self.text.replace("T", " ").split(".")[0]
             return node("time", text, {"datetime": self.text})
+        elif self.type == "strong" or self.type == "emphasis":
+            return node(self.type, self.text, {})
 
         attrs = {"class": self.type} if self.type else {}
         return node("span", self.text, attrs)

@@ -25,8 +25,10 @@ import time
 import urllib.request
 import urllib.error
 from pathlib import Path
+import math
 
-from archivereader import Context
+import mdom
+from archivereader import Context, Message
 
 try:
     from slack_sdk import WebClient
@@ -248,6 +250,8 @@ class SlackAPIImporter:
                 else:
                     print(f"    Error fetching messages from #{channel_name}: {e}")
                     break
+
+        messages.sort(key=lambda d: float(d.get("ts", "0")))
 
         return {
             "channel_id": channel_id,
@@ -577,6 +581,71 @@ CHANNEL_NAME_TO_TITLE = {
 }
 
 
+def zero_pad(n):
+    s = str(n)
+    return s if len(s) == 2 else f"0{s}"
+
+
+def week_of_month(dt):
+    first_day = dt.replace(day=1)
+    week_number = math.ceil((dt.day + first_day.weekday()) / 7)
+    return week_number
+
+
+def format_msg_ts(dt):
+    iso_string = dt.isoformat()
+    date_part, microseconds = iso_string.split(".")
+    return f"{date_part}.{microseconds[:3]}Z"
+
+
+def format_thread_archive_url(dt, channel_name):
+    year = dt.year
+    month = zero_pad(dt.month)
+    week = f"W{week_of_month(dt)}"
+    msg_ts = format_msg_ts(dt)
+
+    return f"https://history.futureofcoding.org/history/weekly/{year}/{month}/{week}/{channel_name}.html#{msg_ts}"
+
+
+class NewsletterMessage(Message):
+    def to_mdom(self, ctx: Context, channel_name: str):
+        childs = [
+            mdom.Heading(
+                2,
+                [
+                    mdom.Span("icon", " 🗨️ "),
+                    mdom.Span("strong", self.user.name),
+                    mdom.Span("sep", ": "),
+                ],
+            )
+        ]
+
+        for attachment in self.attachments:
+            childs.append(mdom.Paragraph("p", [attachment.title_to_mdom()]))
+
+        thread_url = format_thread_archive_url(self.dt, channel_name)
+        childs.append(
+            mdom.Paragraph(
+                "p",
+                [
+                    mdom.Ref(
+                        "link",
+                        thread_url,
+                        f"🧵 conversation @ {self.dt.isoformat().split('T')[0]}",
+                    )
+                ],
+            )
+        )
+
+        for block in self.blocks:
+            childs.append(block.to_mdom(ctx))
+
+        for attachment in self.attachments:
+            childs.append(attachment.to_mdom(ctx))
+
+        return mdom.Block("message", childs)
+
+
 def conversations_to_md(input_file: str, base_path: str = ".") -> None:
     """Convert conversations JSON to Markdown format."""
     try:
@@ -593,9 +662,10 @@ def conversations_to_md(input_file: str, base_path: str = ".") -> None:
         return
 
     ctx = Context.from_base_path(base_path)
+    ctx.Message = NewsletterMessage
 
     for channel_data in data:
-        channel_name = channel_data.get("channel_name", "Unknown Channel")
+        channel_name = channel_data.get("channel_name", "unknown-channel")
         channel_title = CHANNEL_NAME_TO_TITLE.get(channel_name, channel_name)
         messages = channel_data.get("messages", [])
 
@@ -608,7 +678,7 @@ def conversations_to_md(input_file: str, base_path: str = ".") -> None:
         for message in messages:
             msg = ctx.message_from_data(message)
             print()
-            print(msg.to_mdom(ctx).to_md())
+            print(msg.to_mdom(ctx, channel_name).to_md())
             print()
 
 

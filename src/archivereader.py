@@ -4,7 +4,7 @@ import re
 import sqlite3
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Self
@@ -49,6 +49,7 @@ class Context:
         self.channels = channels
         self.shortcode_to_emoji = shortcode_to_emoji
         self.msgs = []
+        self.Message = Message
 
     def warn(self, type_, data):
         self.msgs.append(dict(level="warn", type=type_, data=data))
@@ -110,7 +111,7 @@ class Context:
         assert ts is not None
         assert text is not None
 
-        return Message(
+        return self.Message(
             t, user, ts, thread_ts, text, team, blocks, reactions, attachments
         )
 
@@ -299,7 +300,7 @@ class Attachment:
         self.thumb = thumb
         self.image = image
 
-    def to_mdom(self, ctx: Context):
+    def title_to_mdom(self):
         icon = SERVICE_EMOJI.get(self.service_name, DEFAULT_SERVICE_EMOJI)
 
         if self.url:
@@ -307,7 +308,10 @@ class Attachment:
         else:
             title = mdom.Span("title", f"{icon} {self.title}")
 
-        childs = [mdom.Paragraph("attachment-title", [title])]
+        return title
+
+    def to_mdom(self, ctx: Context):
+        childs = [mdom.Paragraph("attachment-title", [self.title_to_mdom()])]
 
         if self.text:
             childs.append(
@@ -362,7 +366,7 @@ class Message:
         self.user = user
         self.ts = ts
         self.thread_ts = thread_ts
-        self.dt = datetime.fromtimestamp(float(ts))
+        self.dt = datetime.utcfromtimestamp(float(ts))
         self.text = text
         self.team = team
         self.blocks = blocks
